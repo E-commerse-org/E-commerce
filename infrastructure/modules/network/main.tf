@@ -110,7 +110,7 @@ resource "aws_route_table" "private_rtb" {
 }
 
 resource "aws_route_table_association" "private_subnet_assoc" {
-  count          = 3
+  count = length(aws_subnet.private_subnet)
   subnet_id      = aws_subnet.private_subnet[count.index].id
   route_table_id = aws_route_table.private_rtb.id
 }
