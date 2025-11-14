@@ -79,9 +79,8 @@ jobs:
           context: .
           file: ./Dockerfile
           tags: ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=ecommerce-cache
+          cache-to: type=gha,mode=max,scope=ecommerce-cache
 
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@0.28.0
