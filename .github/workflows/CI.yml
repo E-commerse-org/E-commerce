@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  id-token: write
 
 env:
   AWS_REGION: us-east-1
@@ -17,7 +18,6 @@ env:
   SONAR_PROJECT_KEY: sonar-test-e-commerce_new-sonarscan
   SONAR_ORGANIZATION: sonar-test-e-commerce
   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-  IMAGE_URI: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}
 
 jobs:
   # Job 1: SonarCloud Code Analysis
@@ -50,12 +50,48 @@ jobs:
             -Dsonar.coverage.exclusions=aiops/detector/detector.py
             -Dsonar.qualitygate.wait=true
 
-  # Job 2: Build, Scan, and Push Docker Image
+  # Job 2: Cache Docker Layers
+  cache-docker-layers:
+    name: Cache Docker Layers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore layer cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('**/Dockerfile') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build image to warm cache (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: cache-warm:${{ github.sha }}
+          load: false
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+
+      - name: Save updated cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('**/Dockerfile') }}
+
+  # Job 3: Build, Scan, and Push Docker Image
   build-scan-and-push:
     name: Build, Scan, and Push Docker Image
     runs-on: ubuntu-latest
     needs:
       - sonarcloud-analysis
+      - cache-docker-layers
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -73,14 +109,18 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Docker image with cache
+      - name: Set IMAGE_URI
+        run: |
+          echo "IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}" >> $GITHUB_ENV
+
+      - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           tags: ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-          cache-from: type=gha,scope=ecommerce-cache
-          cache-to: type=gha,mode=max,scope=ecommerce-cache
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@0.28.0
@@ -105,19 +145,22 @@ jobs:
           docker push $IMAGE_URI:latest
           docker push $IMAGE_URI:${{ github.sha }}
 
-      - name: Push Docker image to Docker Hub (main only)
+      - name: Push Docker image to Docker Hub
         if: github.ref == 'refs/heads/main'
         run: |
           echo "Logging in to Docker Hub..."
           echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+
           IMAGE_NAME=${{ env.ECR_REPOSITORY }}
           IMAGE_TAG=${{ github.sha }}
+
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
+
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
 
-  # Job 3: Notify Success
+  # Job 4: Notify Success
   notify-success:
     name: Send Success Notification
     runs-on: ubuntu-latest
@@ -132,7 +175,7 @@ jobs:
           --data "{\"text\":\"✅ *CI Pipeline Succeeded!*\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\nImage pushed to ECR successfully.\"}" \
           "$SLACK_WEBHOOK_URL"
 
-  # Job 4: Notify Failure
+  # Job 5: Notify Failure
   notify-failure:
     name: Send Failure Notification
     runs-on: ubuntu-latest
