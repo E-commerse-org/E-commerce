@@ -5,7 +5,7 @@ on:
     branches:
       - main
   pull_request:
-
+  
 permissions:
   contents: read
   security-events: write
@@ -36,6 +36,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
@@ -50,7 +51,6 @@ jobs:
             -Dsonar.coverage.exclusions=aiops/detector/detector.py
             -Dsonar.qualitygate.wait=true
 
-  # Job 2: Cache Docker Layers
   cache-docker-layers:
     name: Cache Docker Layers
     runs-on: ubuntu-latest
@@ -85,13 +85,14 @@ jobs:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ hashFiles('**/Dockerfile') }}
 
-  # Job 3: Build, Scan, and Push Docker Image
+        
+  # Job 2: Build, Scan, and Push Docker Image
   build-scan-and-push:
     name: Build, Scan, and Push Docker Image
     runs-on: ubuntu-latest
     needs:
       - sonarcloud-analysis
-      - cache-docker-layers
+      - cache-docker-layers      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -109,19 +110,11 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set IMAGE_URI
-        run: |
-          echo "IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}" >> $GITHUB_ENV
-
+      # Step 1: Build Docker image
       - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          tags: ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
-
+        run: |
+          docker build -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+      # Step 2: Scan image
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -137,16 +130,21 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+      # Step 3: Tag & Push image (only if build & scan succeed)
       - name: Tag and Push Docker image to ECR
         run: |
+          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}
           echo "Pushing image to $IMAGE_URI"
+          
+          # Tag both latest and commit SHA
           docker tag ${{ env.ECR_REPOSITORY }}:${{ github.sha }} $IMAGE_URI:latest
           docker tag ${{ env.ECR_REPOSITORY }}:${{ github.sha }} $IMAGE_URI:${{ github.sha }}
+          # Push both tags
           docker push $IMAGE_URI:latest
           docker push $IMAGE_URI:${{ github.sha }}
 
+      # Step 4: Push image to Docker Hub (backup)
       - name: Push Docker image to Docker Hub
-        if: github.ref == 'refs/heads/main'
         run: |
           echo "Logging in to Docker Hub..."
           echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
@@ -154,13 +152,17 @@ jobs:
           IMAGE_NAME=${{ env.ECR_REPOSITORY }}
           IMAGE_TAG=${{ github.sha }}
 
+          echo "Tagging image for Docker Hub..."
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
 
+          echo "Pushing image to Docker Hub..."
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
 
-  # Job 4: Notify Success
+          echo "✅ Image pushed to Docker Hub successfully!"
+
+  # Job 3: Notify Success
   notify-success:
     name: Send Success Notification
     runs-on: ubuntu-latest
@@ -174,8 +176,7 @@ jobs:
           curl -X POST -H 'Content-type: application/json' \
           --data "{\"text\":\"✅ *CI Pipeline Succeeded!*\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\nImage pushed to ECR successfully.\"}" \
           "$SLACK_WEBHOOK_URL"
-
-  # Job 5: Notify Failure
+  # Job 4: Notify Failure
   notify-failure:
     name: Send Failure Notification
     runs-on: ubuntu-latest
