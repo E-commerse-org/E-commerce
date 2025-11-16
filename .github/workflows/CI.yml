@@ -36,7 +36,6 @@ jobs:
           distribution: temurin
           java-version: 17
 
-
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
@@ -69,13 +68,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Build image to warm cache (no push)
+      - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          tags: cache-warm:${{ github.sha }}
-          load: false
+          tags: ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          load: true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
@@ -110,10 +109,17 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Step 1: Build Docker image
-      - name: Build Docker image
-        run: |
-          docker build -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+      # Step 1: Build Docker image (UPDATED HERE)
+      - name: Build Docker image using Buildx with cache
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          load: true
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+
       # Step 2: Scan image
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@0.28.0
@@ -136,10 +142,9 @@ jobs:
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}
           echo "Pushing image to $IMAGE_URI"
           
-          # Tag both latest and commit SHA
           docker tag ${{ env.ECR_REPOSITORY }}:${{ github.sha }} $IMAGE_URI:latest
           docker tag ${{ env.ECR_REPOSITORY }}:${{ github.sha }} $IMAGE_URI:${{ github.sha }}
-          # Push both tags
+
           docker push $IMAGE_URI:latest
           docker push $IMAGE_URI:${{ github.sha }}
 
@@ -152,11 +157,9 @@ jobs:
           IMAGE_NAME=${{ env.ECR_REPOSITORY }}
           IMAGE_TAG=${{ github.sha }}
 
-          echo "Tagging image for Docker Hub..."
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
 
-          echo "Pushing image to Docker Hub..."
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
 
@@ -176,6 +179,7 @@ jobs:
           curl -X POST -H 'Content-type: application/json' \
           --data "{\"text\":\"✅ *CI Pipeline Succeeded!*\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\nImage pushed to ECR successfully.\"}" \
           "$SLACK_WEBHOOK_URL"
+
   # Job 4: Notify Failure
   notify-failure:
     name: Send Failure Notification
