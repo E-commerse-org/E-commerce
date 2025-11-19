@@ -47,9 +47,8 @@ jobs:
             -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
             -Dsonar.sources=.
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/*.test.js,**/*.spec.js
-            -Dsonar.coverage.exclusions=**/* 
+            -Dsonar.coverage.exclusions=aiops/detector/detector.py
             -Dsonar.qualitygate.wait=true
-
   cache-docker-layers:
     name: Cache Docker Layers
     runs-on: ubuntu-latest
@@ -67,7 +66,6 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ hashFiles('**/Dockerfile') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -144,27 +142,20 @@ jobs:
           
           docker tag ${{ env.ECR_REPOSITORY }}:${{ github.sha }} $IMAGE_URI:latest
           docker tag ${{ env.ECR_REPOSITORY }}:${{ github.sha }} $IMAGE_URI:${{ github.sha }}
-
           docker push $IMAGE_URI:latest
           docker push $IMAGE_URI:${{ github.sha }}
-
       # Step 4: Push image to Docker Hub (backup)
       - name: Push Docker image to Docker Hub
         run: |
           echo "Logging in to Docker Hub..."
           echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-
           IMAGE_NAME=${{ env.ECR_REPOSITORY }}
           IMAGE_TAG=${{ github.sha }}
-
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker tag $IMAGE_NAME:$IMAGE_TAG docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
-
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
-
           echo "✅ Image pushed to Docker Hub successfully!"
-
   # Job 3: Notify Success
   notify-success:
     name: Send Success Notification
@@ -179,7 +170,6 @@ jobs:
           curl -X POST -H 'Content-type: application/json' \
           --data "{\"text\":\"✅ *CI Pipeline Succeeded!*\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\nImage pushed to ECR successfully.\"}" \
           "$SLACK_WEBHOOK_URL"
-
   # Job 4: Notify Failure
   notify-failure:
     name: Send Failure Notification
