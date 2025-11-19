@@ -3,8 +3,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import client from "prom-client"; // <-- Prometheus client
-
 import connectDB from "./config/mongodb.js";
 import connectCloudinary from "./config/cloudinary.js";
 import userRouter from "./routes/userRoute.js";
@@ -18,32 +16,6 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
-
-// ---------------------- Prometheus metrics ----------------------
-const requestCounter = new client.Counter({
-  name: "app_requests_total",
-  help: "Total number of API requests",
-});
-
-// Collect default Node.js metrics (CPU, memory, event loop, etc.)
-client.collectDefaultMetrics();
-
-// Middleware to count all API requests
-app.use("/api", (req, res, next) => {
-  requestCounter.inc();
-  next();
-});
-
-// Metrics endpoint for Prometheus to scrape
-app.get("/metrics", async (req, res) => {
-  try {
-    res.set("Content-Type", client.register.contentType);
-    res.end(await client.register.metrics());
-  } catch (err) {
-    res.status(500).end(err);
-  }
-});
-// -----------------------------------------------------------------
 
 // MongoDB + Cloudinary
 connectDB();
@@ -73,5 +45,4 @@ app.get("*", (req, res) => {
 app.use(notFoundPageError);
 app.use(globaErrorController);
 
-app.listen(port, () => console.log("Server started on port: " + port));
-
+app.listen(port, () => console.log("server started on port :" + port));
