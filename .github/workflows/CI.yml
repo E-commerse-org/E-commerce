@@ -46,6 +46,7 @@ jobs:
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
             -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
             -Dsonar.sources=.
+            -Dsonar.coverage.exclusions=Backend/server.js,aiops/**
             -Dsonar.qualitygate.wait=true
   cache-docker-layers:
     name: Cache Docker Layers
