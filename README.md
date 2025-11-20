@@ -1,80 +1,149 @@
-# Coder-Fit: Tech-Themed E-commerce Platform
+# Full-Stack App: Node.js Backend + Frontend
 
-Coder Fit is an e-commerce platform tailored for developers, offering a wide range of tech-themed apparel and accessories. From witty code snippet t-shirts to hoodies adorned with programming icons, Coder Fit enables tech enthusiasts to showcase their passion for technology through fashion. 
-
-## Website Links
-- **Website**: [Coder Fit](https://coder-fit.vercel.app/)  
-- **Admin Dashboard**: [Coder Admin](https://coder-admin.vercel.app/)
+This is a full-stack application combining a Node.js backend and a modern frontend (React/Vue/Angular). The project uses a **multi-stage Docker build** to produce a lightweight production image that serves both the backend API and the built frontend.
 
 ---
+
 
 ## Objectives
 
-- **Enhance Brand Awareness**: Reach developers and tech enthusiasts worldwide.  
-- **Personalized Shopping**: Deliver a seamless and customized user experience.  
-- **Customer Retention**: Ensure loyalty through exceptional support and rewards.  
-- **Scalable Platform**: Support global expansion with robust infrastructure.  
-- **Secure Transactions**: Provide reliable payment gateways for safe purchases.
+- **Unified Deployment**: Combine frontend and backend in a single production-ready Docker image.  
+- **Optimized Performance**: Use multi-stage builds to reduce final image size.  
+- **Scalable Architecture**: Enable horizontal scaling of backend services.  
+- **Secure Runtime**: Install only production dependencies in the final image.  
+- **Developer-Friendly**: Maintain clear separation between build and runtime stages.
 
 ---
 
-## Key Features
+## 1. Multi-Stage Docker Build
 
-### 1. Tech-Themed Product Catalog
-- **Overview**: Offers a curated collection of apparel and accessories inspired by programming languages, humor, and tech icons.  
-- **Highlights**: Detailed product info, including images, price, sizes, and colors.  
-- **Categories**: Men, women, and kids.
+The Dockerfile separates the build process into multiple stages to create a smaller, production-ready image.
+<br><br>
+<img width="1920" height="1080" alt="Screenshot from 2025-11-20 17-48-23" src="https://github.com/user-attachments/assets/b4796700-9b2a-4eb2-b99f-05b3b9b76162" />
+<br><br>
 
-### 2. User Authentication
-- **Overview**: Secure login and account management with JWT (JSON Web Tokens).  
-- **Features**: Register, login, reset passwords, and access account settings.  
-- **Benefit**: Ensures data privacy and smooth account control.
+### 1.1 Frontend Build Stage
+- **Base Image**: `node:20`  
+- **Purpose**: Build frontend assets for production.  
+- **Highlights**:  
+  - Installs frontend dependencies.  
+  - Builds production-ready files in `/frontend/dist`.  
+- **Benefit**: Ready-to-serve static frontend assets.
 
-### 3. Error Handling
-- **Overview**: Displays clear, user-friendly error messages for better navigation.  
-- **Examples**: Failed logins, payment errors, or unavailable products.  
-- **Benefit**: Reduces frustration and improves user satisfaction.
+### 1.2 Backend Build Stage
+- **Base Image**: `node:20`  
+- **Purpose**: Install backend dependencies and prepare the backend source.  
+- **Highlights**:  
+  - Installs backend dependencies.  
+  - Copies backend source code.  
+- **Benefit**: Clean separation between development and production code.
 
-### 4. Categorization & Filtering
-- **Overview**: Products are organized by gender, size, and color.  
-- **Benefit**: Helps users find relevant items quickly.
-
-### 5. Order Management
-- **Overview**: Allows customers to track their order history and statuses.  
-- **Admin Features**: Manage order placements and deliveries.
-
-### 6. Payment Gateway Integration
-- **Overview**: Secure payments via Stripe and Cash on Delivery (COD).  
-- **Features**: Real-time status updates and payment notifications.  
-- **Benefit**: Ensures safe and flexible transactions.
-
-### 7. Responsive Design
-- **Overview**: Optimized browsing experience for mobile and desktop.  
-- **Features**: Dynamic animations for desktop; streamlined layouts for mobile.  
-- **Benefit**: Ensures usability across devices.
-
-### 8. Admin Dashboard
-- **Overview**: Centralized control for managing inventory and orders.  
-- **Features**: Add/edit/delete products, track orders, and handle returns.  
-- **Benefit**: Simplifies operational management.
-
-### 9. Permission Guards
-- **Overview**: Role-based access control with tokens.  
-- **Features**: Admins manage products and orders; customers access personal data.  
-- **Benefit**: Prevents unauthorized access to sensitive areas.
-
-### 10. Real-Time Data Synchronization
-- **Overview**: Instant updates across the platform for changes like inventory and order statuses.  
-- **Technology**: Real-Time APIs.  
-- **Benefit**: Ensures users and admins always view the latest information.
+### 1.3 Final Production Image
+- **Base Image**: `node:20-slim`  
+- **Purpose**: Serve backend API and frontend assets in a minimal image.  
+- **Highlights**:  
+  - Installs only production dependencies.  
+  - Copies backend and built frontend from previous stages.  
+  - Exposes port `5000`.  
+  - Starts server with `node server.js`.  
+- **Benefit**: Lightweight, secure, and production-ready container.
 
 ---
 
-## Get Started
-Explore Coder Fit and join the growing community of developers expressing their love for tech through fashion!  
-- **Website**: [Coder Fit](https://coder-fit.vercel.app/)  
-- **Admin Dashboard**: [Coder Admin](https://coder-admin.vercel.app/)
+## 2. Environment Configuration
+- **Variable**: `PORT` (default `5000`)  
+- **Benefit**: Flexible deployment for different environments.
 
-## Project report
-- **Report**: [Report](https://drive.google.com/file/d/1ltAmzRgnVfXL-PjVQBfnPLqtW3uS1d3R/view?usp=drive_link)
-- **Presentation**: [Presentation](https://docs.google.com/presentation/d/1nC1h6SGl4ZSGU2Qsu5BkBQjf8q4R8T6g/edit?usp=drive_link&ouid=100669555505994572380&rtpof=true&sd=true)
+---
+
+## 3. Build Docker Image
+```bash
+docker build -t fullstack-app .
+```
+---
+- **Visualization** : Image size (e-commerce-medium)
+<img width="1920" height="1080" alt="Screenshot from 2025-11-20 17-51-23" src="https://github.com/user-attachments/assets/93308dab-0926-44ec-bacf-d38c8d3fba35" />
+
+<br><br>
+
+## 4. CI/CD Pipeline
+
+
+The GitHub Actions pipeline automates testing, Docker builds, security scans, and deployments.
+
+### 4.1 Workflow Triggers
+- **Push** to `main` branch
+- **Pull Requests**
+- **Environment variables**:
+  - AWS region, ECR repository, container name
+  - SonarCloud project key and organization
+  - Slack webhook URL
+
+
+<img width="1920" height="1080" alt="Screenshot from 2025-11-20 17-46-16" src="https://github.com/user-attachments/assets/c0be4b4f-6e40-44fb-a0f9-f36067131e00" />
+<br><br>
+
+### 4.2 Jobs
+
+#### 4.2.1 SonarCloud Code Analysis
+- **Purpose**: Ensure code quality and test coverage.
+- **Process**: The pipeline analyzes the code with SonarCloud. Files like `Backend/server.js` and `aiops/**` are excluded because they currently do not have automated tests. Only code that passes quality gates proceeds to the next stage.
+- **Visualization** : If code passes Quality gates
+<br>
+<img width="1920" height="1080" alt="Screenshot from 2025-11-20 17-10-41" src="https://github.com/user-attachments/assets/fab3c029-acbe-44e7-8a88-7f789bd69ed9" />
+<br><br>
+
+- **Visualization** : If code fails Quality gates
+<br>
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/9955091b-61e6-4c95-9655-939f6fc43fe3" />
+<br><br>
+
+
+- **Visualization** : The developer should review it to ensure it is safe to pass the test
+<br>
+
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/16753dd3-f4c7-493e-834a-86e393d738e5" />
+<br><br>
+
+#### 4.2.2 Cache Docker Layers
+- **Purpose**: Speed up Docker builds by reusing previously built layers.
+- **Process**: The pipeline restores cached layers from previous builds, builds the Docker image using the cache for efficiency, and saves updated layers for future runs.
+- **Visualization:**
+<img width="1920" height="1080" alt="Screenshot from 2025-11-20 17-25-37" src="https://github.com/user-attachments/assets/d61cf295-ae62-4300-a179-f199c998fba6" />
+
+<br><br>
+#### 4.2.3 Build, Scan, and Push Docker Image
+- **Purpose**: Build a production-ready Docker image, ensure its security, and deploy it.
+- **Process**: The pipeline builds the Docker image with caching, scans it for OS and library vulnerabilities using Trivy, uploads scan results to GitHub Security Dashboard, and pushes the verified image to **Amazon ECR** and **Docker Hub**.
+- **Visualization** : Scan docker image with trivy
+<br>
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/23f12a6f-6776-4279-8111-45ed9d4798cb" />
+<br><br>
+
+- **Visualization** : push docker image to Dockerhub
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/3d38c7fd-6ed9-4b58-9d8b-a2f0ae8a8c07" />
+<br><br>
+
+- **Visualization** : push docker image to Amazon ECR
+
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/1ef89426-d2d6-400d-9f0a-e7da20e098d3" />
+<br><br>
+
+#### 4.2.4 Notify Success
+- **Purpose**: Inform the team when the pipeline succeeds.
+- **Process**: Sends a Slack message summarizing the repository, branch, commit SHA, and confirming the Docker image was successfully built and deployed.
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/e582e25a-6c59-46e4-959d-bd8900241e49" />
+
+
+#### 4.2.5 Notify Failure
+- **Purpose**: Alert the team if the pipeline fails.
+- **Process**: Sends a Slack message with repository, branch, and commit SHA to quickly notify developers for troubleshooting.
+<img width="1920" height="1080" alt="Screenshot from 2025-11-20 17-37-20" src="https://github.com/user-attachments/assets/fd65ba49-fe88-4a87-a839-0bf867bbe7ef" />
+
+
+### 4.3 Pipeline Benefits
+- Ensures code quality and coverage via SonarCloud
+- Speeds up builds with Docker layer caching
+- Secures containers with automated Trivy scans
+- Automates deployment to ECR and Docker Hub
+- Keeps the team informed through Slack notifications
