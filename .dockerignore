@@ -1,0 +1,24 @@
+# Node dependencies (Docker installs its own)
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Git
+.git
+.gitignore
+
+# Local environment files (not needed inside image)
+.env
+.env.* 
+
+# Temporary files
+*.swp
+*.tmp
+*.temp
