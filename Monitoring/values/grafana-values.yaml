@@ -1,0 +1,32 @@
+grafana:
+  adminUser: admin
+  adminPassword: "admin123"
+
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: gp2
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+
+  service:
+    type: LoadBalancer  
+    port: 80
+
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/"
+      serve_from_sub_path: true
+
+  affinity:
+    podAffinity: {}
+    podAntiAffinity: {}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: failure-domain.beta.kubernetes.io/zone
+                operator: In
+                values:
+                  - us-east-1a
