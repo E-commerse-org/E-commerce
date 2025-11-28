@@ -1,34 +1,44 @@
-variable "repo_name" {}
-variable "image_name" {}
+# variable "repo_name" {}
+# variable "image_name" {}
 variable "cluster_name" {}
 variable "cell_name" {}
-variable "network_mode" {}
 variable "cluster_region" {}
-variable "ecs_type" {}
-variable "memory_size" {}
-variable "cpu_size" {}
-variable "container_port" {}
-variable "host_port" {}
 variable "env" {}
-variable "desired_containers" {}
-variable "public_ip" {}
 variable "vpc_id" {}
-variable "db_name" {}
-variable "db_username" {}
-variable "db_password" {}
-variable "db_endpoint" {}
-variable "db_port" {}
-variable "service_subnets" {
-  type = list(string)
+# variable "db_name" {}
+# variable "db_username" {}
+# variable "db_password" {}
+# variable "db_endpoint" {}
+# variable "db_port" {}
+variable "private_subnets" {}
+variable "private_subnets_workaround" {}
+
+# Kubernetes Version
+variable "kubernetes_version" {
+  description = "The Kubernetes version to use for the EKS cluster."
+  type        = string
+  default     = "1.29"
 }
-variable "service_security_groups" {
-  type = list(string)
+# Node Group Instance Type
+variable "instance_type" {
+  description = "The instance type for the EKS worker nodes."
+  type        = string
+  default     = "t3.micro"
+}
+# Horizontal Scaling Configuration
+variable "min_node_count" {
+  description = "The minimum number of worker nodes for the node group (for HA and cost control)."
+  type        = number
+  default     = 1 # Minimum 2 nodes across 3 AZs for high availability
+}
+variable "desired_node_count" {
+  description = "The desired number of worker nodes to start with."
+  type        = number
+  default     = 1
+}
+variable "max_node_count" {
+  description = "The maximum number of worker nodes to scale out to."
+  type        = number
+  default     = 3 # Allows for significant horizontal scaling
 }
 
-variable "alb_target_type" {}
-variable "alb_subnets" {
-  type = list(string)
-}
-variable "alb_security_groups" {
-  type = list(string)
-}

@@ -6,6 +6,10 @@ resource "aws_subnet" "public_subnet" {
   availability_zone       = var.subnet_az[count.index]
   tags = {
     Name = "${var.env}-public-subnet-${count.index}"
+    "kubernetes.io/cluster/cluster-${var.env}-cell1" = "owned"
+    "kubernetes.io/cluster/cluster-${var.env}-cell2" = "owned"
+    "kubernetes.io/cluster/cluster-${var.env}-cell3" = "owned"
+    "kubernetes.io/role/internal-elb"           = "1"
   }
 }
 
@@ -18,6 +22,9 @@ resource "aws_subnet" "private_subnet" {
 
   tags = {
     Name = "${var.env}-private-subnet-${count.index}"
+    "kubernetes.io/cluster/cluster-${var.env}-cell1" = "owned"
+    "kubernetes.io/cluster/cluster-${var.env}-cell2" = "owned"
+    "kubernetes.io/cluster/cluster-${var.env}-cell3" = "owned"
   }
   depends_on = [aws_vpc_endpoint.s3_gateway]
 }
@@ -61,7 +68,7 @@ resource "aws_vpc_endpoint" "s3_gateway" {
   vpc_id            = var.vpc_id
   service_name      = "com.amazonaws.${var.region}.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids = [aws_route_table.private_rtb.id]
+  route_table_ids = [aws_route_table.private_rtb[0].id,aws_route_table.private_rtb[1].id,aws_route_table.private_rtb[2].id]
 
   tags = {
     "Name" = "${var.env}-s3-gateway"
@@ -103,16 +110,26 @@ resource "aws_route_table_association" "public_subnet_assoc" {
 
 # Private Subnet Route table Configuration
 resource "aws_route_table" "private_rtb" {
-  vpc_id       = var.vpc_id
-  tags   = {
-    Name = "${var.env}-private-rtb"
+  count = 3
+  vpc_id = var.vpc_id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_gw[count.index].id
+  }
+
+  tags = {
+    Name = "private-rtb-${count.index}"
   }
 }
+resource "aws_route_table_association" "private_assoc" {
+  for_each = {
+    for index, subnet in aws_subnet.private_subnet :
+    index => subnet.id
+  }
 
-resource "aws_route_table_association" "private_subnet_assoc" {
-  count = length(aws_subnet.private_subnet)
-  subnet_id      = aws_subnet.private_subnet[count.index].id
-  route_table_id = aws_route_table.private_rtb.id
+  subnet_id = each.value
+  route_table_id = aws_route_table.private_rtb[floor(each.key / 2)].id
 }
 
 # Accessing our network Using IGW
@@ -121,4 +138,21 @@ resource "aws_internet_gateway" "igw" {
   tags = {
     Name = "${var.env}-igw"
   }
+}
+resource "aws_eip" "eip_for_natgw" {
+  count                   = 3
+  tags = {
+    Name = "nat-eip-${count.index}"
+  }
+}
+
+resource "aws_nat_gateway" "nat_gw" {
+  count                   = 3
+  allocation_id = aws_eip.eip_for_natgw[count.index].id
+  subnet_id     = aws_subnet.public_subnet[count.index].id
+
+  tags = {
+    Name = "${var.env}-nat-${count.index}"
+  }
+  depends_on = [aws_internet_gateway.igw]
 }

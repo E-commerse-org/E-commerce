@@ -40,29 +40,19 @@ variable "db_master_password" {
   sensitive   = true
 }
 variable "repo_name" {}
-
-# # DocumentDB Variables
-# variable "docdb_master_username" {
-#   description = "Master username for DocumentDB"
-#   type        = string
-#   sensitive   = true
-# }
-
-# variable "docdb_master_password" {
-#   description = "Master password for DocumentDB"
-#   type        = string
-#   sensitive   = true
-# }
-
-# variable "docdb_instance_class" {
-#   description = "Instance class for DocumentDB"
-#   type        = string
-#   default     = "db.t3.medium"
-# }
-
-# # ElastiCache Variables
-# variable "redis_node_type" {
-#   description = "Node type for ElastiCache Redis"
-#   type        = string
-#   default     = "cache.t3.micro"
-# }
+# Horizontal Scaling Configuration
+variable "min_node_count" {
+  description = "The minimum number of worker nodes for the node group (for HA and cost control)."
+  type        = number
+  default     = 1 # Minimum 2 nodes across 3 AZs for high availability
+}
+variable "desired_node_count" {
+  description = "The desired number of worker nodes to start with."
+  type        = number
+  default     = 1
+}
+variable "max_node_count" {
+  description = "The maximum number of worker nodes to scale out to."
+  type        = number
+  default     = 3 # Allows for significant horizontal scaling
+}

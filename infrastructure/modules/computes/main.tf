@@ -1,221 +1,109 @@
-######## ECS 
-resource "aws_ecs_cluster" "ecs_cluster" {
-  name = "${var.env}-${var.cluster_name}-${var.cell_name}"
+# --- 1. EKS Cluster IAM Role ---
+resource "aws_iam_role" "eks_cluster" {
+  name = "${var.cluster_name}-eks-cluster-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "eks.amazonaws.com"
+      }
+    }]
+  })
 }
 
-resource "aws_ecs_service" "my_app_service" {
-  name            = "${var.env}-${var.cluster_name}-service-${var.cell_name}"
-  cluster         = aws_ecs_cluster.ecs_cluster.id
-  task_definition = aws_ecs_task_definition.my_app_task.arn
-  launch_type     = "${var.ecs_type}"
-  desired_count   = var.desired_containers
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.eks_cluster.name
+}
+
+# --- 3. EKS Node Group IAM Role ---
+resource "aws_iam_role" "eks_nodes" {
+  name = "${var.cluster_name}-eks-node-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.eks_nodes.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.eks_nodes.name
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_container_registry_read_only" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.eks_nodes.name
+}
+
+# Attach AutoScalingFullAccess for Cluster Autoscaler
+resource "aws_iam_role_policy_attachment" "eks_cluster_autoscaler_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AutoScalingFullAccess"
+  role       = aws_iam_role.eks_nodes.name
+
   depends_on = [
-    aws_iam_role_policy_attachment.ecs_execution_role_policy,
-    aws_iam_role_policy_attachment.ecs_execution_ecr_vpc_attach,
-    aws_iam_policy_attachment.ecs_task_s3_attach,
-    aws_lb_listener.ecs_alb_listener
+    aws_iam_role.eks_nodes
   ]
-  load_balancer {
-    target_group_arn = aws_lb_target_group.ecs_tg.arn
-    container_name   = "${var.image_name}"
-    container_port   = var.container_port
+}
+
+# --- 4. EKS Cluster (Control Plane) ---
+resource "aws_eks_cluster" "main" {
+  name     = "${var.env}-${var.cluster_name}-${var.cell_name}"
+  role_arn = aws_iam_role.eks_cluster.arn
+  version  = var.kubernetes_version
+
+  vpc_config {
+    subnet_ids = concat(var.private_subnets, var.private_subnets_workaround)
   }
-  network_configuration {
-    subnets          = var.service_subnets
-    security_groups  = var.service_security_groups
-    assign_public_ip = var.public_ip
-  }
+
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
+  depends_on = [aws_iam_role_policy_attachment.eks_cluster_policy]
+}
+
+# --- 5. EKS Managed Node Group ---
+resource "aws_eks_node_group" "autoscaling_nodes" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "autoscaling-group"
+  node_role_arn   = aws_iam_role.eks_nodes.arn
+  subnet_ids      = var.private_subnets
+
+  instance_types = [var.instance_type]
+  ami_type        = "AL2_x86_64"
   
-}
-
-# ECS Task Definition Configuration
-data "aws_caller_identity" "current" {} # to get your Account ID 
-resource "aws_ecs_task_definition" "my_app_task" {
-  family                   = "${var.env}-${var.cluster_name}_task_${var.cell_name}"
-  requires_compatibilities = ["${var.ecs_type}"]
-  network_mode             = var.network_mode
-  cpu                      = var.cpu_size
-  memory                   = var.memory_size
-  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
-  task_role_arn            = aws_iam_role.ecs_task_role.arn
-  container_definitions = jsonencode([
-    {
-      name      = "${var.image_name}"
-      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.cluster_region}.amazonaws.com/${var.repo_name}:latest"
-      essential = true
-        environment = [
-        {
-          name  = "POSTGRES_DB"
-          value = var.db_name
-        },
-        {
-          name  = "POSTGRES_USER"
-          value = var.db_username
-        },
-        {
-          name  = "POSTGRES_HOST"
-          value = var.db_endpoint
-        },
-        {
-          name  = "POSTGRES_PORT"
-          value = tostring(var.db_port)
-        },
-        {
-          name      = "POSTGRES_PASSWORD"
-          value = var.db_password
-        }
-      ]
-      portMappings = [
-        {
-          containerPort = var.container_port
-          hostPort      = var.host_port
-        }
-      ]
-      logConfiguration = {
-          logDriver = "awslogs"
-          options = {
-            awslogs-group = "/ecs/${var.image_name}"
-            awslogs-region        = "${var.cluster_region}"
-            awslogs-stream-prefix = "ecs"
-          }
-       }
-    }
-  ])
-  
-}
-
-
-# IAM Role Configuration
-resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "${var.env}-ecs-task-execution-role-${var.cell_name}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect = "Allow",
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
-      },
-      Action = "sts:AssumeRole"
-    }]
-  })
+  remote_access {
+    source_security_group_ids = []  # Allow control plane access
+  }
+  scaling_config {
+    desired_size = var.desired_node_count
+    min_size     = var.min_node_count
+    max_size     = var.max_node_count
+  }
 
   tags = {
-    Name = "${var.env}-ecs-task-execution-role-${var.env}"
+    Name = "${var.cluster_name}-worker-node"
   }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.ec2_container_registry_read_only,
+    aws_iam_role_policy_attachment.eks_cluster_autoscaler_policy,
+  ]
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
-  role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
 
-resource "aws_iam_policy" "ecs_execution_ecr_vpc_policy" {
-  name = "${var.env}-ecs-execution-ecr-vpc-policy-${var.cell_name}"
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "secretsmanager:GetSecretValue",
-          "kms:Decrypt",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_execution_ecr_vpc_attach" {
-  role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = aws_iam_policy.ecs_execution_ecr_vpc_policy.arn
-}
-
-resource "aws_iam_role" "ecs_task_role" {
-  name = "${var.env}-ecs-task-role-${var.cell_name}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect = "Allow",
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
-      },
-      Action = "sts:AssumeRole"
-    }]
-  })
-
-  tags = {
-    Name = "${var.env}-ecs-task-role"
-  }
-}
-
-resource "aws_iam_policy" "ecs_task_s3_policy" {
-  name        = "${var.env}-ecs-task-s3-policy-${var.cell_name}"
-  description = "Policy for ECS tasks to access S3 bucket"
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "s3:GetObject",
-          "s3:ListBucket"
-        ],
-        Resource = ["*"]
-      }
-    ]
-  })
-}
-
-resource "aws_iam_policy_attachment" "ecs_task_s3_attach" {
-  name       = "${var.env}-ecs-task-s3-attach-${var.cell_name}"
-  roles      = [aws_iam_role.ecs_task_role.name]
-  policy_arn = aws_iam_policy.ecs_task_s3_policy.arn
-}
-
-# ALB 
-resource "aws_lb" "ecs_alb" {
-  name                       = "ecs-alb-${var.cell_name}"
-  internal                   = false
-  load_balancer_type         = "application"
-  security_groups            = var.alb_security_groups
-  subnets                    = var.alb_subnets
-  enable_deletion_protection = false
-
-  tags = {
-    Name = "ecs-alb"
-  }
-}
-
-resource "aws_lb_target_group" "ecs_tg" {
-  name        = "ecs-target-group-${var.cell_name}"
-  port        = var.container_port # default port to the audience
-  protocol    = "HTTP"
-  target_type = "${var.alb_target_type}"
-  vpc_id      = var.vpc_id
-
-  health_check {
-    path     = "/"
-    protocol = "HTTP"
-    port     = var.container_port
-  }
-}
-
-resource "aws_lb_listener" "ecs_alb_listener" {
-  load_balancer_arn = aws_lb.ecs_alb.arn
-  port              = var.container_port
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.ecs_tg.arn
-  }
-}
