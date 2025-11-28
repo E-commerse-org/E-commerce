@@ -152,3 +152,187 @@ The GitHub Actions pipeline automates testing, Docker builds, security scans, an
 - Secures containers with automated Trivy scans
 - Automates deployment to ECR and Docker Hub
 - Keeps the team informed through Slack notifications
+
+---
+
+# **Monitoring Infrastructure**
+
+This documentation outlines the monitoring layer of the DevOps project, implemented using **Terraform** and deployed on an existing **Amazon EKS** cluster. The monitoring system uses the **kube-prometheus-stack** Helm chart to provide full observability for Kubernetes workloads.
+
+---
+
+## **Overview**
+
+The monitoring infrastructure provisions and configures:
+
+* **Prometheus** for cluster-wide metrics collection
+* **Alertmanager** for alerting
+* **Grafana** for visualization dashboards
+
+All Kubernetes manifests and Helm components are deployed and managed through **Infrastructure-as-Code (IaC)** using Terraform.
+
+The module is organized into:
+
+* **main.tf** – providers, data sources, and Helm release configuration
+* **variables.tf** – module inputs (AWS region, EKS cluster name)
+* **outputs.tf** – exposed values such as Grafana access credentials
+
+---
+
+## **Folder Structure**
+
+```
+monitoring/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+└── values/
+    ├── prometheus-values.yaml
+    └── grafana-values.yaml
+```
+
+---
+
+# **1. main.tf — Terraform Configuration Breakdown**
+
+## **1. Terraform Settings**
+
+The configuration:
+
+* Ensures Terraform uses a compatible version
+* Declares required providers:
+
+  * **AWS** (for EKS metadata)
+  * **Kubernetes** (for cluster interaction)
+  * **Helm** (for chart deployments)
+
+---
+
+## **2. Provider Configuration**
+
+### **AWS Provider**
+
+Uses the AWS region defined in `variables.tf`.
+
+### **Kubernetes & Helm Providers**
+
+These providers authenticate to the EKS cluster using runtime-generated data:
+
+* API endpoint
+* Cluster CA certificate
+* IAM-authenticated token
+
+This approach ensures:
+
+* Terraform interacts directly with the EKS API
+* No manual kubeconfig files
+* All communication remains secure and authenticated
+
+---
+
+## **3. Data Sources**
+
+The following data sources retrieve connection details for the EKS cluster:
+
+* **Cluster endpoint (API server)**
+* **Certificate authority**
+* **Short-lived authentication token**
+
+Terraform uses these values to connect to the cluster securely.
+
+---
+
+## **4. Monitoring Stack Deployment**
+
+The monitoring stack is deployed through the official Helm chart:
+
+* Installs **Prometheus**, **Alertmanager**, **Grafana**, **kube-state-metrics**, and **node exporters**
+* Uses chart version **56.16.0**
+* Applies custom configuration via YAML values files
+* Creates the `monitoring` namespace automatically
+* Uses an extended timeout due to the size and complexity of the deployment
+
+---
+
+## **5. Outputs**
+
+The module provides the command used to retrieve the Grafana admin password.
+The password is not exposed directly for security purposes.
+
+---
+
+# **2. variables.tf — Variables**
+
+The monitoring module includes two input variables for configuring the target deployment environment.
+
+---
+
+## **1. `aws_region`**
+
+**Description:**
+Specifies the AWS region where the EKS cluster is running. Used by the AWS provider to locate resources.
+
+* **Default:** `us-east-1`
+* **Type:** `string`
+
+**Example:**
+
+```sh
+terraform apply -var="aws_region=eu-west-1"
+```
+
+---
+
+## **2. `eks_cluster_name`**
+
+**Description:**
+Defines the name of the EKS cluster where the monitoring stack will be deployed.
+Used by AWS data sources to retrieve cluster connection information.
+
+* **Default:** `monitoring-cluster`
+* **Type:** `string`
+
+**Example:**
+
+```sh
+terraform apply -var="eks_cluster_name=production-eks"
+```
+
+---
+
+# **3. outputs.tf — Outputs**
+
+The module exposes key values to help users access the monitoring system after deployment.
+
+---
+
+## **1. `grafana_url`**
+
+**Description:**
+Provides the URL of the Grafana dashboard exposed through the Kubernetes LoadBalancer.
+The output returns a command that retrieves the external hostname of the Grafana service.
+
+---
+
+## **2. `grafana_admin_password`**
+
+**Description:**
+Exposes the default admin password for Grafana.
+
+**Note:**
+Storing plaintext credentials in Terraform outputs is not recommended for production.
+Best practice is to retrieve the credentials from Kubernetes Secrets or override them using Helm values.
+
+---
+
+![1](https://github.com/user-attachments/assets/1c5f35bb-7f31-45dc-a5dc-af02cf7e25b5)
+
+![2](https://github.com/user-attachments/assets/1acb8533-f47a-4400-80d2-2bef6ee459c1)
+
+![3](https://github.com/user-attachments/assets/3172780c-d09d-4d9d-ba00-e25762d58cf0)
+
+![4](https://github.com/user-attachments/assets/9a4580e8-55a0-4ae4-8adf-0341e13eb287)
+
+
+
+
