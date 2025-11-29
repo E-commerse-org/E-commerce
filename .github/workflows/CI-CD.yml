@@ -21,8 +21,32 @@ env:
 
 jobs:
 
+# Security
+# 1. Secret Scanning
+  secret-scanning:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+  
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --verbose --redact --no-fail
 
-  # OWASP DEPENDENCY CHECK JOB
+      - name: Export Gitleaks Report
+        run: gitleaks detect -v --report-path=gitleaks-report.json
+
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+  # 2. OWASP DEPENDENCY CHECK JOB
 
   owasp-dependency-check:
     name: OWASP Dependency-Check
@@ -207,3 +231,7 @@ jobs:
           curl -X POST -H 'Content-type: application/json' \
           --data "{\"text\":\"❌ *CI Pipeline Failed!*\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\"}" \
           "$SLACK_WEBHOOK_URL"
+
+  # OWASP ZAP BASELINE SCAN
+
+
