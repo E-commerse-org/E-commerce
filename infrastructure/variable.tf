@@ -25,21 +25,6 @@ variable "az" {
   type        = list(string)
 }
 
-variable "image_name" {
-  description = "Contains the image name"
-  type        = string
-}
-
-variable "container_port" {}
-variable "cpu" {}
-variable "memory" {}
-
-variable "db_master_password" {
-  description = "Master password for RDS"
-  type        = string
-  sensitive   = true
-}
-variable "repo_name" {}
 # Horizontal Scaling Configuration
 variable "min_node_count" {
   description = "The minimum number of worker nodes for the node group (for HA and cost control)."
