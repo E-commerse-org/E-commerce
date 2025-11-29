@@ -90,7 +90,6 @@ jobs:
         run: |
           checkov -d . \
           -bc-api-key "" \
-          --no-soft-fail \
           -o json > checkov-report.json
 
       - name: Upload report
