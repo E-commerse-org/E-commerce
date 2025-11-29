@@ -22,6 +22,7 @@ env:
 jobs:
 
 # Security
+
 # 1. Secret Scanning
   secret-scanning:
     name: Secret Scanning (Gitleaks)
@@ -67,6 +68,36 @@ jobs:
         with:
           name: dependency-check-report
           path: reports/
+
+  # Infrastructure as Code Scanning with Checkov
+  
+  checkov-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov scan
+        run: |
+          checkov -d . \
+           -bc-api-key "" \
+           --soft-fail false \
+           -o json > checkov-report.json
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: checkov-report.json
 
   # Job 1: SonarCloud Code Analysis
   sonarcloud-analysis:
