@@ -53,7 +53,7 @@ provider "kubernetes" {
 provider "helm" {
   alias = "cell1"
 
-  kubernetes = {
+  kubernetes  {
     host                   = module.computes["cell1"].cluster_info.endpoint
     cluster_ca_certificate = base64decode(module.computes["cell1"].cluster_info.certificate_authority[0].data)
     token                  = data.aws_eks_cluster_auth.auth["cell1"].token
@@ -63,7 +63,7 @@ provider "helm" {
 provider "helm" {
   alias = "cell2"
 
-  kubernetes = {
+  kubernetes  {
     host                   = module.computes["cell2"].cluster_info.endpoint
     cluster_ca_certificate = base64decode(module.computes["cell2"].cluster_info.certificate_authority[0].data)
     token                  = data.aws_eks_cluster_auth.auth["cell2"].token
@@ -73,7 +73,7 @@ provider "helm" {
 provider "helm" {
   alias = "cell3"
 
-  kubernetes = {
+  kubernetes  {
     host                   = module.computes["cell3"].cluster_info.endpoint
     cluster_ca_certificate = base64decode(module.computes["cell3"].cluster_info.certificate_authority[0].data)
     token                  = data.aws_eks_cluster_auth.auth["cell3"].token

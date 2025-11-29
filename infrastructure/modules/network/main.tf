@@ -75,19 +75,6 @@ resource "aws_vpc_endpoint" "s3_gateway" {
   }
 }
 
-resource "aws_vpc_endpoint" "cloudwatch_logs" {
-  vpc_id            = var.vpc_id
-  service_name      = "com.amazonaws.${var.region}.logs"
-  vpc_endpoint_type = "Interface"
-  subnet_ids        = [
-    aws_subnet.private_subnet[0].id,
-    aws_subnet.private_subnet[2].id,
-    aws_subnet.private_subnet[4].id
-  ]
-  private_dns_enabled = true
-  security_group_ids = [var.vpc_endpoint_sg]
-}
-
 # Public Route Table Configuration
 resource "aws_route_table" "public_rtb" {
   vpc_id       = var.vpc_id
