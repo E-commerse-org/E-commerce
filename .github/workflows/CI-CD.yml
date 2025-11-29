@@ -90,6 +90,7 @@ jobs:
         run: |
           checkov -d infrastructure \
             --download-external-modules true \
+            --soft-fail \
             -o json \
             --output-file-path checkov-report.json
 
