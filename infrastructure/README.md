@@ -5,9 +5,8 @@
 This Terraform infrastructure provisions a highly available, multi-cell Amazon EKS (Elastic Kubernetes Service) architecture on AWS. The design implements a cell-based pattern with three independent EKS clusters (cell1, cell2, cell3) for improved fault isolation and scalability.
 
 ## Architecture Components
-
 ![Architecture](Architecture.png)
-
+---
 ### Core Infrastructure
 
 - **VPC**: Custom VPC with configurable CIDR block
@@ -536,7 +535,6 @@ aws eks describe-nodegroup --cluster-name {cluster-name} --nodegroup-name autosc
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)
 - [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler)
-- [Architecture](https://aws-solutions-library-samples.github.io/compute/cell-based-architecture-for-amazon-eks.html#architecture-overview)
 
 ## Support & Contributing
 
@@ -548,6 +546,6 @@ For issues or questions:
 
 ---
 
-**Version**: 1.0  
+**Version**: 2.0  
 **Last Updated**: November 2025  
 **Maintained By**: Infrastructure Team
