@@ -89,7 +89,6 @@ jobs:
       - name: Run Checkov scan
         run: |
           checkov -d . \
-          -bc-api-key "" \
           -o json > checkov-report.json
 
       - name: Upload report
