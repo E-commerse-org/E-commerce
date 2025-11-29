@@ -89,6 +89,7 @@ jobs:
       - name: Run Checkov scan
         run: |
           checkov -d . \
+          --download-external-modules true \
           -o json > checkov-report.json
 
       - name: Upload report
