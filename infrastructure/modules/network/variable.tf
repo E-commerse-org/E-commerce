@@ -5,6 +5,4 @@ variable "subnet_az" {
 }
 variable "env" {}
 variable "region" {}
-variable "vpc_endpoint_sg" {
-  type = string
-}
+

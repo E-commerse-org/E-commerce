@@ -40,7 +40,7 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
     aws_subnet.private_subnet[4].id
   ]
   private_dns_enabled = true
-  security_group_ids = [var.vpc_endpoint_sg]
+  security_group_ids = [aws_security_group.vpc_endpoints_sg.id]
   tags = {
     Name = "${var.env}-ecr-endpoint-data-plane"
   }
@@ -56,8 +56,7 @@ resource "aws_vpc_endpoint" "ecr_api" {
     aws_subnet.private_subnet[4].id
   ]
   private_dns_enabled = true
-  security_group_ids = [var.vpc_endpoint_sg]
-
+  security_group_ids = [aws_security_group.vpc_endpoints_sg.id]
 
   tags = {
     Name = "${var.env}-ecr-endpoint-control-plane"
@@ -75,6 +74,32 @@ resource "aws_vpc_endpoint" "s3_gateway" {
   }
 }
 
+# Security - AWS SG for VPC Endpoints
+resource "aws_security_group" "vpc_endpoints_sg" {
+  name_prefix = "${var.env}-vpc-endpoints"
+  description = "Associated to ECR/s3 VPC Endpoints"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Allow Nodes to pull images from ECR via VPC endpoints"
+    protocol        = "tcp"
+    from_port       = 443
+    to_port         = 443
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    protocol    = "tcp"
+    from_port   = 80
+    to_port     = 80
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 # Public Route Table Configuration
 resource "aws_route_table" "public_rtb" {
   vpc_id       = var.vpc_id

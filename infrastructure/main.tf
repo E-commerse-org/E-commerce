@@ -24,7 +24,6 @@ module "subnet" {
   region          = var.region
   subnet_az       = var.az
   env             = var.environment
-  vpc_endpoint_sg = aws_security_group.vpc_endpoints_sg.id
 }
 
 # Computing - AWS ECS

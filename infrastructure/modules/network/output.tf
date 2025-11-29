@@ -20,6 +20,11 @@ output "vpc_endpoint_s3_id" {
   value       = aws_vpc_endpoint.s3_gateway.id
 }
 
+output "VPC Endpoints Security Group ID" {
+  description = "ID of Internet Gateway"
+  value       = aws_security_group.vpc_endpoints_sg.id
+}
+
 output "internet_gateway_id" {
   description = "ID of Internet Gateway"
   value       = aws_internet_gateway.igw.id
