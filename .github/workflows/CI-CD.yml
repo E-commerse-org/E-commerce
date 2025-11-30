@@ -185,7 +185,7 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
-          scan-ref: .github/workflows/CI-CD.yml
+          scan-ref: .github/workflows/ci_cd.yml
 
       - uses: github/codeql-action/upload-sarif@v4
         with:
