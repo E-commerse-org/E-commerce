@@ -39,27 +39,27 @@ jobs:
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         with:
-          args: detect --source . --verbose --redact --report-format json --report-path ${{ github.workspace }}/gitleaks-report.json --no-fail
+          args: detect --source . --verbose --redact --report-format json --report-path gitleaks-report.json --no-fail
   
       - name: Verify Report Exists
         run: |
-          ls -la ${{ github.workspace }}
-  
+          ls -la
+      
       - name: Count Gitleaks issues
         id: count
         run: |
-          if [ ! -f "${{ github.workspace }}/gitleaks-report.json" ]; then
-            echo "Missing report. Gitleaks probably cried itself to death."
+          if [ ! -f "gitleaks-report.json" ]; then
+            echo "Missing report. Gitleaks probably panicked again."
             exit 1
           fi
-          GL_COUNT=$(jq 'length' "${{ github.workspace }}/gitleaks-report.json")
+          GL_COUNT=$(jq 'length' "gitleaks-report.json")
           echo "gl_count=$GL_COUNT" >> $GITHUB_OUTPUT
-  
+      
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-report
-          path: ${{ github.workspace }}/gitleaks-report.json
+          path: gitleaks-report.json
 
 
 
