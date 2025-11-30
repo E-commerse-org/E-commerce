@@ -33,29 +33,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-  
+
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         with:
           args: detect --source . --verbose --redact --report-format json --report-path gitleaks-report.json --no-fail
 
-  
       - name: Count Gitleaks issues
         id: count
         run: |
-          if [ ! -f "gitleaks-report.json" ]; then
-            echo "gl_count=0" >> $GITHUB_OUTPUT
-          else
-            GL_COUNT=$(jq 'length' gitleaks-report.json)
-            echo "gl_count=$GL_COUNT" >> $GITHUB_OUTPUT
-          fi
-  
+          GL_COUNT=$(gitleaks detect --source . --report-format json | jq 'length')
+          echo "gl_count=$GL_COUNT" >> $GITHUB_OUTPUT
+
+
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-report
           path: gitleaks-report.json
-  
+
   ###########################################
   # 2. OWASP Dependency Check
   ###########################################
@@ -66,32 +64,26 @@ jobs:
       dc_count: ${{ steps.count.outputs.dc_count }}
     steps:
       - uses: actions/checkout@v4
-  
+
       - name: Run OWASP Dependency-Check
         uses: dependency-check/Dependency-Check_Action@1.1.0
         with:
           project: "e-commerce-app"
           path: "./"
           format: "HTML"
-  
+
       - name: Count Dependency-Check issues
         id: count
         run: |
-          REPORT_FILE=$(find . -name "*.html" | head -n 1)
-          if [ -f "$REPORT_FILE" ]; then
-            DC_COUNT=$(grep -i -c 'vulnerability' "$REPORT_FILE" || echo 0)
-          else
-            DC_COUNT=0
-          fi
+          DC_COUNT=$(grep -i -c 'vulnerability' reports/*.html || echo 0)
           echo "dc_count=$DC_COUNT" >> $GITHUB_OUTPUT
 
-  
-      - name: Upload Dependency-Check Report
+      - name: Upload Checkov Report
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-report
-          path: "*.html"
-  
+          name: checkov-report
+          path: checkov-report.json
+
   ###########################################
   # 3. Checkov IaC Scan
   ###########################################
@@ -102,38 +94,28 @@ jobs:
       ckv_count: ${{ steps.count.outputs.ckv_count }}
     steps:
       - uses: actions/checkout@v4
-  
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-  
+
       - name: Install Checkov
         run: pip install checkov
-  
+
       - name: Run Checkov scan
-        run: |
-          checkov -d infrastructure \
-            --download-external-modules true \
-            --soft-fail \
-            -o json \
-            --output-file-path checkov-report.json
-  
+        run: checkov -d infrastructure --download-external-modules true --soft-fail -o json --output-file-path checkov-report.json
+
       - name: Count Checkov issues
         id: count
         run: |
-          if [ ! -f "checkov-report.json" ]; then
-            echo "ckv_count=0" >> $GITHUB_OUTPUT
-          else
-            CKV_COUNT=$(jq '.results.failed_checks | length' checkov-report.json 2>/dev/null || echo 0)
-            echo "ckv_count=$CKV_COUNT" >> $GITHUB_OUTPUT
-          fi
-  
-      - name: Upload Checkov Report
+          CKV_COUNT=$(jq '.results.failed_checks | length' checkov-report.json 2>/dev/null || echo 0)
+          echo "ckv_count=$CKV_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Upload Dependency-Check Report
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-report
-          path: checkov-report.json
-
+          name: dependency-check-report
+          path: reports/*.html
 
   ###########################################
   # 4. SonarCloud Code Analysis
