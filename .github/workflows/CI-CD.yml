@@ -207,66 +207,52 @@ jobs:
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
 
   ###########################################
-  # 7A. Slack Notification – Success
+  # 7. Slack Notification – Combined Summary
   ###########################################
-  notify-success:
-    name: Slack Notification – Success
+  notify-slack:
+    name: Slack Notification – CI/CD Summary
     runs-on: ubuntu-latest
-    needs: [build-and-deploy]
-    if: needs.build-and-deploy.result == 'success'
-    steps:
-      - name: Send Success Message to Slack
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"*CI/CD Pipeline Status*\nStatus: ✅ Success\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\"}" \
-          "$SLACK_WEBHOOK_URL"
-
-  ###########################################
-  # 7B. Slack Notification – Failure
-  ###########################################
-  notify-failure:
-    name: Slack Notification – Failure
-    runs-on: ubuntu-latest
-    needs: [build-and-deploy]
-    if: needs.build-and-deploy.result == 'failure'
-    steps:
-      - name: Send Failure Message to Slack
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"*CI/CD Pipeline Status*\nStatus: ❌ Failure\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\"}" \
-          "$SLACK_WEBHOOK_URL"
-
-  ###########################################
-  # 8. Slack Notification – Security Results
-  ###########################################
-  notify-security:
-    name: Slack Notification – Security Scan Results
-    runs-on: ubuntu-latest
-    needs: [secret-scanning, owasp-dependency-check, checkov-scan]
+    needs: [build-and-deploy, secret-scanning, owasp-dependency-check, checkov-scan]
     if: always()
     steps:
-      - name: Count issues
-        id: count-issues
+      - name: Gather scan results
+        id: gather
         run: |
           GL_COUNT=${{ needs.secret-scanning.outputs.gl_count }}
           DC_COUNT=${{ needs.owasp-dependency-check.outputs.dc_count }}
           CKV_COUNT=${{ needs.checkov-scan.outputs.ckv_count }}
-          echo "gl_count=$GL_COUNT" >> $GITHUB_ENV
-          echo "dc_count=$DC_COUNT" >> $GITHUB_ENV
-          echo "ckv_count=$CKV_COUNT" >> $GITHUB_ENV
 
-      - name: Send Security Scan Results to Slack
+          # Determine build status
+          if [[ "${{ needs.build-and-deploy.result }}" == "success" ]]; then
+            BUILD_STATUS="✅ Build Success"
+          else
+            BUILD_STATUS="❌ Build Failed"
+          fi
+
+          # Determine security status
+          if [[ "$GL_COUNT" -eq 0 && "$DC_COUNT" -eq 0 && "$CKV_COUNT" -eq 0 ]]; then
+            SECURITY_STATUS="✅ No Security Issues"
+          else
+            SECURITY_STATUS="❌ Security Issues Detected"
+          fi
+
+          echo "BUILD_STATUS=$BUILD_STATUS" >> $GITHUB_ENV
+          echo "SECURITY_STATUS=$SECURITY_STATUS" >> $GITHUB_ENV
+          echo "GL_COUNT=$GL_COUNT" >> $GITHUB_ENV
+          echo "DC_COUNT=$DC_COUNT" >> $GITHUB_ENV
+          echo "CKV_COUNT=$CKV_COUNT" >> $GITHUB_ENV
+
+      - name: Send combined message to Slack
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          GL_COUNT: ${{ env.gl_count }}
-          DC_COUNT: ${{ env.dc_count }}
-          CKV_COUNT: ${{ env.ckv_count }}
+          BUILD_STATUS: ${{ env.BUILD_STATUS }}
+          SECURITY_STATUS: ${{ env.SECURITY_STATUS }}
+          GL_COUNT: ${{ env.GL_COUNT }}
+          DC_COUNT: ${{ env.DC_COUNT }}
+          CKV_COUNT: ${{ env.CKV_COUNT }}
         run: |
-          STATUS=$([[ "${{ job.status }}" == "success" ]] && echo "✅ Success" || echo "❌ Issues Found")
           curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"*Security Scan Results*\nStatus: $STATUS\nGitleaks secrets: $GL_COUNT\nOWASP Dependency-Check issues: $DC_COUNT\nCheckov IaC issues: $CKV_COUNT\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\"}" \
+          --data "{
+            \"text\": \"*CI/CD Pipeline Summary*\n*Build Status:* $BUILD_STATUS\n*Security Status:* $SECURITY_STATUS\n*Gitleaks Secrets:* $GL_COUNT\n*Dependency-Check Issues:* $DC_COUNT\n*Checkov IaC Issues:* $CKV_COUNT\n*Repository:* $GITHUB_REPOSITORY\n*Branch:* $GITHUB_REF_NAME\n*Commit:* $GITHUB_SHA\"
+          }" \
           "$SLACK_WEBHOOK_URL"
