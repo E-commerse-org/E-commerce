@@ -35,14 +35,10 @@ jobs:
           fetch-depth: 0
   
       - name: Run Gitleaks
-        run: |
-          gitleaks detect \
-            --source . \
-            --verbose \
-            --redact \
-            --report-format json \
-            --report-path gitleaks-report.json \
-            --no-fail
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --verbose --redact --report-format json --report-path gitleaks-report.json --no-fail
+
   
       - name: Count Gitleaks issues
         id: count
@@ -88,6 +84,7 @@ jobs:
             DC_COUNT=0
           fi
           echo "dc_count=$DC_COUNT" >> $GITHUB_OUTPUT
+
   
       - name: Upload Dependency-Check Report
         uses: actions/upload-artifact@v4
