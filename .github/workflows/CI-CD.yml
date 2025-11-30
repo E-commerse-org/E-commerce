@@ -24,28 +24,27 @@ jobs:
 # Security Section
 
 # 1. Secret Scanning with GitLeaks
-  secret-scanning:
-    name: Secret Scanning (Gitleaks)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-  
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: detect --source . --verbose --redact --no-fail
+   secret-scanning:
+   name: Secret Scanning (Gitleaks)
+   runs-on: ubuntu-latest
+   steps:
+     - name: Checkout code
+       uses: actions/checkout@v4
+       with:
+         fetch-depth: 0
 
-      - name: Export Gitleaks Report
-        run: gitleaks detect -v --report-path=gitleaks-report.json
+     - name: Run Gitleaks
+       uses: gitleaks/gitleaks-action@v2
 
-      - name: Upload Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: gitleaks-report
-          path: gitleaks-report.json
+     - name: Export Gitleaks Report
+       run: gitleaks detect -v --report-path=gitleaks-report.json
+
+     - name: Upload Report
+       uses: actions/upload-artifact@v4
+       with:
+         name: gitleaks-report
+         path: gitleaks-report.json
+
 
   # 2. OWASP DEPENDENCY CHECK
 
