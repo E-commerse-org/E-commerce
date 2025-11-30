@@ -35,18 +35,22 @@ jobs:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-        with:
-          args: detect --source . --verbose --redact --report-format json --report-path gitleaks-report.json --no-fail
+        run: |
+          gitleaks detect \
+            --source . \
+            --verbose \
+            --redact \
+            --report-format json \
+            --report-path gitleaks-report.json \
+            --no-fail
 
       - name: Count Gitleaks issues
         id: count
         run: |
           GL_COUNT=$(gitleaks detect --source . --report-format json | jq 'length')
           echo "gl_count=$GL_COUNT" >> $GITHUB_OUTPUT
-
 
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@v4
@@ -81,8 +85,8 @@ jobs:
       - name: Upload Checkov Report
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-report
-          path: checkov-report.json
+          name: dependency-check-report
+          path: dependency-check-report.html
 
   ###########################################
   # 3. Checkov IaC Scan
@@ -103,7 +107,12 @@ jobs:
         run: pip install checkov
 
       - name: Run Checkov scan
-        run: checkov -d infrastructure --download-external-modules true --soft-fail -o json --output-file-path checkov-report.json
+        run: |
+          checkov -d infrastructure \
+            --download-external-modules true \
+            --soft-fail \
+            -o json \
+            --output-file-path checkov-report.json
 
       - name: Count Checkov issues
         id: count
@@ -114,8 +123,8 @@ jobs:
       - name: Upload Dependency-Check Report
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-report
-          path: reports/*.html
+          name: checkov-report
+          path: checkov-report.json
 
   ###########################################
   # 4. SonarCloud Code Analysis
