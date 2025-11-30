@@ -3,5 +3,5 @@ variable "aws_region" {
 }
 
 variable "eks_cluster_name" {
-  default = "monitoring-cluster"
+  default = "highly-available-cluster"
 }
