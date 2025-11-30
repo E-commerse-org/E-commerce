@@ -47,6 +47,13 @@ jobs:
           GL_COUNT=$(gitleaks detect --source . --report-format json | jq 'length')
           echo "gl_count=$GL_COUNT" >> $GITHUB_OUTPUT
 
+
+      - name: Upload Gitleaks Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
   ###########################################
   # 2. OWASP Dependency Check
   ###########################################
@@ -70,6 +77,12 @@ jobs:
         run: |
           DC_COUNT=$(grep -i -c 'vulnerability' reports/*.html || echo 0)
           echo "dc_count=$DC_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Upload Checkov Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: checkov-report.json
 
   ###########################################
   # 3. Checkov IaC Scan
@@ -97,6 +110,12 @@ jobs:
         run: |
           CKV_COUNT=$(jq '.results.failed_checks | length' checkov-report.json 2>/dev/null || echo 0)
           echo "ckv_count=$CKV_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Upload Dependency-Check Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/*.html
 
   ###########################################
   # 4. SonarCloud Code Analysis
