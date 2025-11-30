@@ -216,33 +216,51 @@ jobs:
           --data "{\"text\":\"*CI/CD Pipeline Status*\\nStatus: $STATUS\\nRepository: $GITHUB_REPOSITORY\\nBranch: $GITHUB_REF_NAME\\nCommit: $GITHUB_SHA\"}" \
           "$SLACK_WEBHOOK_URL"
 
-  ###########################################
-  # 8. Slack Notification – Security Scan Results
-  ###########################################
+  #####################################
+  # 8. Notify Security Results to Slack
+  #####################################
   notify-security:
-    name: Slack Notification – Security Scan Results
+    name: Send Security Scan Results
     runs-on: ubuntu-latest
     needs: [secret-scanning, owasp-dependency-check, checkov-scan]
     if: always()
     steps:
-      - name: Count issues
-        id: count-issues
+      - name: Download Gitleaks Report
+        uses: actions/download-artifact@v4
+        with:
+          name: gitleaks-report
+          path: reports/gitleaks
+        continue-on-error: true
+  
+      - name: Download Dependency-Check Report
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/dependency-check
+        continue-on-error: true
+  
+      - name: Download Checkov Report
+        uses: actions/download-artifact@v4
+        with:
+          name: checkov-report
+          path: reports/checkov
+        continue-on-error: true
+  
+      - name: Prepare Summary
         run: |
-          GL_COUNT=${{ needs.secret-scanning.outputs.gl_count }}
-          DC_COUNT=${{ needs.owasp-dependency-check.outputs.dc_count }}
-          CKV_COUNT=${{ needs.checkov-scan.outputs.ckv_count }}
+          GL_COUNT=$(jq 'length' reports/gitleaks/gitleaks-report.json 2>/dev/null || echo 0)
+          DC_COUNT=$(grep -c '<Vulnerability>' reports/dependency-check/*.html 2>/dev/null || echo 0)
+          CKV_COUNT=$(jq '.results | length' reports/checkov/checkov-report.json 2>/dev/null || echo 0)
           echo "gl_count=$GL_COUNT" >> $GITHUB_ENV
           echo "dc_count=$DC_COUNT" >> $GITHUB_ENV
           echo "ckv_count=$CKV_COUNT" >> $GITHUB_ENV
-
-      - name: Send Security Scan Results to Slack
+  
+      - name: Send Slack Notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          GL_COUNT: ${{ env.gl_count }}
-          DC_COUNT: ${{ env.dc_count }}
-          CKV_COUNT: ${{ env.ckv_count }}
         run: |
           STATUS=$([[ "${{ job.status }}" == "success" ]] && echo "✅ Success" || echo "❌ Issues Found")
+          TEXT="*Security Scan Results*\nStatus: $STATUS\nGitleaks secrets: $GL_COUNT\nOWASP Dependency-Check issues: $DC_COUNT\nCheckov IaC issues: $CKV_COUNT\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\n\nArtifacts:\n• Gitleaks: reports/gitleaks/gitleaks-report.json\n• Dependency-Check: reports/dependency-check/\n• Checkov: reports/checkov/checkov-report.json"
           curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"*Security Scan Results*\\nStatus: $STATUS\\nGitleaks secrets: $GL_COUNT\\nOWASP Dependency-Check issues: $DC_COUNT\\nCheckov IaC issues: $CKV_COUNT\\nRepository: $GITHUB_REPOSITORY\\nBranch: $GITHUB_REF_NAME\\nCommit: $GITHUB_SHA\"}" \
-          "$SLACK_WEBHOOK_URL"
+            --data "{\"text\":\"$TEXT\"}" \
+            "$SLACK_WEBHOOK_URL"
