@@ -41,6 +41,28 @@ jobs:
         with:
           args: detect --source . --verbose --redact --report-format json --report-path gitleaks-report.json --no-fail
 
+      # ADDED: install gitleaks CLI so your existing "Count Gitleaks issues" step
+      # (which calls `gitleaks detect ...`) will not get "command not found"
+      - name: Install gitleaks CLI (for counting)
+        run: |
+          if ! command -v gitleaks >/dev/null 2>&1; then
+            echo "Installing gitleaks CLI..."
+            curl -sSL https://github.com/zricethezav/gitleaks/releases/latest/download/gitleaks-linux-amd64 -o /usr/local/bin/gitleaks
+            chmod +x /usr/local/bin/gitleaks
+          else
+            echo "gitleaks already present"
+          fi
+
+      # ADDED: ensure there is a JSON report file for the uploader / downstream steps.
+      - name: Ensure gitleaks-report.json exists (fallback)
+        run: |
+          if [ ! -f "gitleaks-report.json" ]; then
+            echo "gitleaks-report.json missing — generating a minimal one with CLI (no-fail)"
+            gitleaks detect --source . --report-format json --report-path gitleaks-report.json --no-fail || true
+          else
+            echo "gitleaks-report.json exists"
+          fi
+
       - name: Count Gitleaks issues
         id: count
         run: |
