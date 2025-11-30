@@ -1,6 +1,5 @@
 name: CI/CD Pipeline
 
-
 on:
   push:
     branches:
@@ -36,6 +35,8 @@ jobs:
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
       - name: Export Gitleaks Report
         run: gitleaks detect -v --report-path=gitleaks-report.json
