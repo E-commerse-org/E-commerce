@@ -228,3 +228,51 @@ jobs:
           curl -X POST -H 'Content-type: application/json' \
           --data "{\"text\":\"*CI/CD Pipeline Status*\\nStatus: $STATUS\\nGitleaks secrets: $GL_COUNT\\nOWASP Dependency-Check issues: $DC_COUNT\\nCheckov IaC issues: $CKV_COUNT\\nRepository: $GITHUB_REPOSITORY\\nBranch: $GITHUB_REF_NAME\\nCommit: $GITHUB_SHA\"}" \
           "$SLACK_WEBHOOK_URL"
+
+  #####################################
+  # 8. Notify Security Results to Slack
+  #####################################
+  notify-security:
+    name: Send Security Scan Results
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, owasp-dependency-check, checkov-scan]
+    if: always()
+    steps:
+      - name: Download Gitleaks Report
+        uses: actions/download-artifact@v4
+        with:
+          name: gitleaks-report
+          path: reports/gitleaks
+  
+      - name: Download Dependency-Check Report
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/dependency-check
+  
+      - name: Download Checkov Report
+        uses: actions/download-artifact@v4
+        with:
+          name: checkov-report
+          path: reports/checkov
+  
+      - name: Prepare Summary
+        run: |
+          # Gitleaks JSON is an array, count items
+          GL_COUNT=$(jq 'length' reports/gitleaks/gitleaks-report.json 2>/dev/null || echo 0)
+          # Dependency-Check HTML, count vulnerabilities by searching for <Vulnerability> tags
+          DC_COUNT=$(grep -c '<Vulnerability>' reports/dependency-check/*.html 2>/dev/null || echo 0)
+          # Checkov JSON array length
+          CKV_COUNT=$(jq '.results | length' reports/checkov/checkov-report.json 2>/dev/null || echo 0)
+          echo "gl_count=$GL_COUNT" >> $GITHUB_ENV
+          echo "dc_count=$DC_COUNT" >> $GITHUB_ENV
+          echo "ckv_count=$CKV_COUNT" >> $GITHUB_ENV
+  
+      - name: Send Slack Notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS=$([[ "${{ job.status }}" == "success" ]] && echo "✅ Success" || echo "❌ Issues Found")
+          curl -X POST -H 'Content-type: application/json' \
+          --data "{\"text\":\"*Security Scan Results*\\nStatus: $STATUS\\nGitleaks secrets: $GL_COUNT\\nOWASP Dependency-Check issues: $DC_COUNT\\nCheckov IaC issues: $CKV_COUNT\\nRepository: $GITHUB_REPOSITORY\\nBranch: $GITHUB_REF_NAME\\nCommit: $GITHUB_SHA\"}" \
+          "$SLACK_WEBHOOK_URL"
