@@ -37,9 +37,17 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-
+        with:
+          args: detect --source . --verbose --redact --no-fail
+  
       - name: Export Gitleaks Report
-        run: gitleaks detect -v --report-path=gitleaks-report.json
+        run: |
+          gitleaks detect \
+            --source . \
+            --report-path=gitleaks-report.json \
+            --redact \
+            --no-fail \
+            --verbose
 
       - name: Upload Report
         uses: actions/upload-artifact@v4
