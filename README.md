@@ -155,6 +155,73 @@ The GitHub Actions pipeline automates testing, Docker builds, security scans, an
 
 ---
 
+# **Security Scanning Pipeline Overview**
+
+This section of the CI/CD pipeline implements three automated security checks to detect secrets, vulnerable dependencies, and insecure Infrastructure-as-Code configurations. These jobs ensure consistent security validation on every run and produce reports that can be consumed by developers or external systems such as Slack notifications.
+
+---
+
+## **1. Secret Scanning (Gitleaks)**
+
+### **Purpose**
+
+Detect hardcoded secrets, tokens, credentials, and sensitive patterns in the repository.
+
+### **Workflow Summary**
+
+1. The repository is checked out with full commit depth to enable complete scanning.
+2. Gitleaks is executed against the repository with verbose output, redaction, and JSON reporting enabled.
+3. A count of detected issues is generated using a secondary Gitleaks scan piped into `jq`.
+4. The final report (`gitleaks-report.json`) is uploaded as a pipeline artifact.
+
+### **Generated Outputs**
+
+* **Report:** `gitleaks-report.json`
+* **Output Variable:** `gl_count` (number of detected secrets)
+
+---
+
+## **2. OWASP Dependency-Check**
+
+### **Purpose**
+
+Identify vulnerable dependencies in the codebase based on known CVEs.
+
+### **Workflow Summary**
+
+1. The repository is checked out.
+2. OWASP Dependency-Check runs against the project root and generates an HTML report.
+3. Vulnerability count is derived by searching for “vulnerability” occurrences in the generated HTML files.
+4. The resulting report is uploaded as an artifact.
+
+### **Generated Outputs**
+
+* **Report:** `reports/*.html`
+* **Output Variable:** `dc_count` (number of discovered vulnerabilities)
+
+---
+
+## **3. Checkov IaC Scan**
+
+### **Purpose**
+
+Scan Terraform and other IaC configurations for security misconfigurations and policy violations.
+
+### **Workflow Summary**
+
+1. The repository is checked out.
+2. Python is configured and Checkov is installed.
+3. Checkov analyzes the `infrastructure` directory and outputs results in JSON format.
+4. Failed policy checks are counted using `jq`.
+5. The report is uploaded as an artifact.
+
+### **Generated Outputs**
+
+* **Report:** `checkov-report.json`
+* **Output Variable:** `ckv_count` (number of failed IaC checks)
+
+---
+
 # **Monitoring Infrastructure**
 
 This documentation outlines the monitoring layer of the DevOps project, implemented using **Terraform** and deployed on an existing **Amazon EKS** cluster. The monitoring system uses the **kube-prometheus-stack** Helm chart to provide full observability for Kubernetes workloads.
