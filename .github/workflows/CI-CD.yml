@@ -25,10 +25,8 @@ jobs:
   # 1. Secret Scanning (Gitleaks)
   ###########################################
   secret-scanning:
-    name: Secret Scanning
+    name: Secret Scanning (Gitleaks)
     runs-on: ubuntu-latest
-    outputs:
-      gl_count: ${{ steps.count.outputs.gl_count }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,11 +39,18 @@ jobs:
         with:
           args: detect --source . --verbose --redact --no-fail
 
-      - name: Count Gitleaks issues
-        id: count
+      - name: Export Gitleaks Report
         run: |
-          GL_COUNT=$(gitleaks detect --source . --report-format json | jq 'length')
-          echo "gl_count=$GL_COUNT" >> $GITHUB_OUTPUT
+          gitleaks detect \
+            --source . \
+            --report-path=gitleaks-report.json \
+            --verbose || true
+
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
 
   ###########################################
   # 2. OWASP Dependency Check
@@ -53,8 +58,6 @@ jobs:
   owasp-dependency-check:
     name: OWASP Dependency-Check
     runs-on: ubuntu-latest
-    outputs:
-      dc_count: ${{ steps.count.outputs.dc_count }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,11 +68,11 @@ jobs:
           path: "./"
           format: "HTML"
 
-      - name: Count Dependency-Check issues
-        id: count
-        run: |
-          DC_COUNT=$(grep -i -c 'vulnerability' reports/*.html || echo 0)
-          echo "dc_count=$DC_COUNT" >> $GITHUB_OUTPUT
+      - name: Upload dependency-check report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/
 
   ###########################################
   # 3. Checkov IaC Scan
@@ -77,8 +80,6 @@ jobs:
   checkov-scan:
     name: Checkov IaC Scan
     runs-on: ubuntu-latest
-    outputs:
-      ckv_count: ${{ steps.count.outputs.ckv_count }}
     steps:
       - uses: actions/checkout@v4
 
@@ -90,19 +91,24 @@ jobs:
         run: pip install checkov
 
       - name: Run Checkov scan
-        run: checkov -d infrastructure --download-external-modules true --soft-fail -o json --output-file-path checkov-report.json
-
-      - name: Count Checkov issues
-        id: count
         run: |
-          CKV_COUNT=$(jq '.results.failed_checks | length' checkov-report.json 2>/dev/null || echo 0)
-          echo "ckv_count=$CKV_COUNT" >> $GITHUB_OUTPUT
+          checkov -d infrastructure \
+            --download-external-modules true \
+            --soft-fail \
+            -o json \
+            --output-file-path checkov-report.json
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: checkov-report.json
 
   ###########################################
   # 4. SonarCloud Code Analysis
   ###########################################
   sonarcloud-analysis:
-    name: SonarCloud Analysis
+    name: SonarCloud Code Analysis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -134,8 +140,6 @@ jobs:
     name: Cache Docker Layers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - uses: docker/setup-buildx-action@v3
 
       - name: Restore layer cache
@@ -146,16 +150,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
+      - name: Build Docker image (cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          load: true
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+
+      - name: Save updated cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('**/Dockerfile') }}
+
   ###########################################
   # 6. Build, Scan, and Push Docker Image
   ###########################################
-  build-and-deploy:
-    name: Build, Scan, Push Docker
+  build-scan-and-push:
+    name: Build, Scan, and Push Docker Image
     runs-on: ubuntu-latest
     needs: [secret-scanning, owasp-dependency-check, checkov-scan, sonarcloud-analysis, cache-docker-layers]
     steps:
-      - uses: actions/checkout@v4
-
       - uses: docker/setup-buildx-action@v3
 
       - name: Configure AWS credentials
@@ -167,7 +185,7 @@ jobs:
 
       - uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Docker image with cache
+      - name: Build Docker image using Buildx with cache
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -191,7 +209,7 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-      - name: Tag and push to ECR
+      - name: Tag and Push Docker image to ECR
         run: |
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}
           docker tag ${{ env.ECR_REPOSITORY }}:${{ github.sha }} $IMAGE_URI:latest
@@ -210,64 +228,76 @@ jobs:
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
 
   ###########################################
-  # 7. Notify Slack
+  # 7. Notify Success
   ###########################################
-  notify-slack:
-    name: Send Slack Notification
+  notify-success:
+    name: Send Success Notification
     runs-on: ubuntu-latest
-    needs: [secret-scanning, owasp-dependency-check, checkov-scan, build-and-deploy]
+    needs: [sonarcloud-analysis, build-scan-and-push]
+    if: success()
     steps:
-      - name: Send Slack Notification
+      - name: Send Slack Success Notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          GL_COUNT: ${{ needs.secret-scanning.outputs.gl_count }}
-          DC_COUNT: ${{ needs.owasp-dependency-check.outputs.dc_count }}
-          CKV_COUNT: ${{ needs.checkov-scan.outputs.ckv_count }}
         run: |
-          STATUS=$([[ "${{ job.status }}" == "success" ]] && echo "✅ Success" || echo "❌ Issues Found")
           curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"*CI/CD Pipeline Status*\\nStatus: $STATUS\\nGitleaks secrets: $GL_COUNT\\nOWASP Dependency-Check issues: $DC_COUNT\\nCheckov IaC issues: $CKV_COUNT\\nRepository: $GITHUB_REPOSITORY\\nBranch: $GITHUB_REF_NAME\\nCommit: $GITHUB_SHA\"}" \
+          --data "{\"text\":\"✅ *CI Pipeline Succeeded!*\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\nImage pushed to ECR successfully.\"}" \
           "$SLACK_WEBHOOK_URL"
 
-  #####################################
-  # 8. Notify Security Results to Slack
-  #####################################
+  ###########################################
+  # 8. Notify Failure
+  ###########################################
+  notify-failure:
+    name: Send Failure Notification
+    runs-on: ubuntu-latest
+    needs: [sonarcloud-analysis, build-scan-and-push]
+    if: failure()
+    steps:
+      - name: Send Slack Failure Notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+          --data "{\"text\":\"❌ *CI Pipeline Failed!*\nRepository: $GITHUB_REPOSITORY\nBranch: $GITHUB_REF_NAME\nCommit: $GITHUB_SHA\"}" \
+          "$SLACK_WEBHOOK_URL"
+
+  ###########################################
+  # 9. Notify Security Scan Results
+  ###########################################
   notify-security:
     name: Send Security Scan Results
     runs-on: ubuntu-latest
     needs: [secret-scanning, owasp-dependency-check, checkov-scan]
     if: always()
     steps:
-      - name: Download Gitleaks Report
+      - name: Download Gitleaks report
         uses: actions/download-artifact@v4
         with:
           name: gitleaks-report
           path: reports/gitleaks
-  
-      - name: Download Dependency-Check Report
+
+      - name: Download Dependency-Check report
         uses: actions/download-artifact@v4
         with:
           name: dependency-check-report
           path: reports/dependency-check
-  
-      - name: Download Checkov Report
+
+      - name: Download Checkov report
         uses: actions/download-artifact@v4
         with:
           name: checkov-report
           path: reports/checkov
-  
-      - name: Prepare Summary
+
+      - name: Count issues
+        id: count-issues
         run: |
-          # Gitleaks JSON is an array, count items
           GL_COUNT=$(jq 'length' reports/gitleaks/gitleaks-report.json 2>/dev/null || echo 0)
-          # Dependency-Check HTML, count vulnerabilities by searching for <Vulnerability> tags
-          DC_COUNT=$(grep -c '<Vulnerability>' reports/dependency-check/*.html 2>/dev/null || echo 0)
-          # Checkov JSON array length
-          CKV_COUNT=$(jq '.results | length' reports/checkov/checkov-report.json 2>/dev/null || echo 0)
+          DC_COUNT=$(grep -i -c 'vulnerability' reports/dependency-check/*.html 2>/dev/null || echo 0)
+          CKV_COUNT=$(jq '.results.failed_checks | length' reports/checkov/checkov-report.json 2>/dev/null || echo 0)
           echo "gl_count=$GL_COUNT" >> $GITHUB_ENV
           echo "dc_count=$DC_COUNT" >> $GITHUB_ENV
           echo "ckv_count=$CKV_COUNT" >> $GITHUB_ENV
-  
+
       - name: Send Slack Notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
