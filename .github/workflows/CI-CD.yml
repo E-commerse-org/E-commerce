@@ -33,30 +33,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+  
       - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-        run: |
-          gitleaks detect \
-            --source . \
-            --verbose \
-            --redact \
-            --report-format json \
-            --report-path gitleaks-report.json \
-            --no-fail
-
+        with:
+          args: detect --source . --verbose --redact --report-format json --report-path gitleaks-report.json --no-fail
+  
       - name: Count Gitleaks issues
         id: count
         run: |
-          GL_COUNT=$(gitleaks detect --source . --report-format json | jq 'length')
+          GL_COUNT=$(jq 'length' gitleaks-report.json)
           echo "gl_count=$GL_COUNT" >> $GITHUB_OUTPUT
-
+  
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-report
           path: gitleaks-report.json
+
 
   ###########################################
   # 2. OWASP Dependency Check
