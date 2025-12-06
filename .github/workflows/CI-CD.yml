@@ -4,7 +4,16 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      action:
+        required: true
+        type: string
+        description: "apply or destroy"
+      approve:
+        required: true
+        type: string
+        description: "approve or dont"
 
 permissions:
   contents: read
@@ -142,9 +151,92 @@ jobs:
           path: checkov-report.json
           retention-days: 30
 
-  ###########################################
-  # 4. SonarCloud Code Analysis
-  ###########################################
+###########################################
+# 3.  IaC Deployment with Manual Approval
+###########################################  
+infrastructure:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.action == 'apply' &&
+      github.event.inputs.approve == 'approve'
+    defaults:
+      run:
+        working-directory: ./infrastructure
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    - name: Export image name to Terraform
+      run: echo "TF_VAR_image_name=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan
+      run: |
+         terraform plan -out=tfplan \
+         -var-file="terraform-prod.tfvars" \
+         -var="image_name=${{ env.IMAGE_NAME }}"
+    - name: Terraform Apply
+      run: |
+        terraform apply -auto-approve \
+        -var-file="terraform-prod.tfvars" \
+        -var="image_name=${{ env.IMAGE_NAME }}"
+destroy:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.action == 'destroy' &&
+      github.event.inputs.approve == 'approve'
+    defaults:
+      run:
+        working-directory: ./infrastructure
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Destroy Plan
+      run: |
+            terraform plan -destroy -out=destroy.plan -var-file="terraform-prod.tfvars"  \
+            -var-file="terraform-prod.tfvars" \
+            -var="image_name=${{ env.IMAGE_NAME }}"
+
+    - name: Terraform Destroy
+      run: terraform apply -auto-approve destroy.plan
+exit:
+  runs-on: ubuntu-latest
+  if: >
+    github.event_name == 'workflow_dispatch' &&
+    github.event.inputs.approve == 'dont'
+  steps:
+    - name: Abort
+      run: echo "Action denied by reviewer."
+###########################################
+# 4. SonarCloud Code Analysis
+###########################################
   sonarcloud-analysis:
     name: SonarCloud Code Analysis
     runs-on: ubuntu-latest
